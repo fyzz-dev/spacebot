@@ -280,12 +280,19 @@ where
             }
         }
 
-        // Channel turns should end immediately after a successful reply tool call.
-        // This avoids extra post-reply LLM iterations that add latency, cost, and
+        // Channel turns should end immediately after successful reply/skip tool calls.
+        // This avoids extra post-tool LLM iterations that add latency, cost, and
         // noisy logs when providers return empty trailing responses.
-        if self.process_type == ProcessType::Channel && tool_name == "reply" {
+        if self.process_type == ProcessType::Channel
+            && matches!(tool_name, "reply" | "skip")
+        {
+            let reason = if tool_name == "reply" {
+                "reply delivered"
+            } else {
+                "skip delivered"
+            };
             return HookAction::Terminate {
-                reason: "reply delivered".into(),
+                reason: reason.into(),
             };
         }
 

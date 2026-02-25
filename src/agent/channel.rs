@@ -1404,7 +1404,17 @@ impl Channel {
                     // result. If the LLM also produced text, send it as a
                     // fallback since the user hasn't seen the result yet.
                     let text = response.trim();
-                    if !text.is_empty() {
+                    if text.is_empty() {
+                        tracing::warn!(
+                            channel_id = %self.id,
+                            "LLM skipped on retrigger with no text — worker/branch result may not have been relayed"
+                        );
+                    } else if is_synthetic_empty_response(text) {
+                        tracing::debug!(
+                            channel_id = %self.id,
+                            "ignored synthetic empty response payload in retrigger fallback"
+                        );
+                    } else {
                         tracing::info!(
                             channel_id = %self.id,
                             response_len = text.len(),
@@ -1435,11 +1445,6 @@ impl Channel {
                                 tracing::error!(%error, channel_id = %self.id, "failed to send retrigger fallback reply");
                             }
                         }
-                    } else {
-                        tracing::warn!(
-                            channel_id = %self.id,
-                            "LLM skipped on retrigger with no text — worker/branch result may not have been relayed"
-                        );
                     }
                 } else if skipped {
                     tracing::debug!(channel_id = %self.id, "channel turn skipped (no response)");
@@ -1450,7 +1455,17 @@ impl Channel {
                     // some models return the result as raw text instead. Send it
                     // as a fallback so the user still gets the worker/branch output.
                     let text = response.trim();
-                    if !text.is_empty() {
+                    if text.is_empty() {
+                        tracing::debug!(
+                            channel_id = %self.id,
+                            "retrigger turn produced no text and no reply tool call"
+                        );
+                    } else if is_synthetic_empty_response(text) {
+                        tracing::debug!(
+                            channel_id = %self.id,
+                            "ignored synthetic empty response payload in retrigger fallback"
+                        );
+                    } else {
                         tracing::info!(
                             channel_id = %self.id,
                             response_len = text.len(),
@@ -1478,11 +1493,6 @@ impl Channel {
                                 tracing::error!(%error, channel_id = %self.id, "failed to send retrigger fallback reply");
                             }
                         }
-                    } else {
-                        tracing::debug!(
-                            channel_id = %self.id,
-                            "retrigger turn produced no text and no reply tool call"
-                        );
                     }
                 } else {
                     // If the LLM returned text without using the reply tool, send it
@@ -2303,6 +2313,10 @@ fn extract_reply_from_tool_syntax(text: &str) -> Option<String> {
     }
 
     None
+}
+
+fn is_synthetic_empty_response(text: &str) -> bool {
+    text.starts_with("(Empty response:")
 }
 
 /// Format a user message with sender attribution from message metadata.
